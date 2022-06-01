@@ -1,0 +1,592 @@
+﻿###############################################################################
+# Setup Script for Windows Host RDP Machine (Hyper-V Host)
+## This is not a full provisioning script, but a script that removes
+### student and instructor lab configuration overhead, thereby making this  a
+### post-provision or end-of-provision script
+###############################################################################
+
+# Instructions on running this script
+# Copy the script over, save it as full-setup.ps1, then run:
+# Set-ExecutionPolicy Bypass -Scope Process -Force; .\full-setup.ps1
+
+# Allow Scripts
+Set-ExecutionPolicy Unrestricted -Force
+
+# Credential setup #TODO Turn this into ENVs?
+$win10User = ".\sysadmin"
+$win10Pass = ConvertTo-SecureString -String "cybersecurity" -AsPlainText -Force
+$win10Credentials = New-Object System.Management.Automation.PSCredential($win10User,$win10Pass)
+
+$serverUser = ".\sysadmin"
+$serverPass = ConvertTo-SecureString -String "p4ssw0rd*" -AsPlainText -Force
+$serverCredentials = New-Object System.Management.Automation.PSCredential($serverUser,$serverPass)
+
+$domainUser = "goodcorp\sysadmin"
+$domainPass = ConvertTo-SecureString -String "p4ssw0rd*" -AsPlainText -Force
+$domainCredentials = New-Object System.Management.Automation.PSCredential($domainUser,$domainPass)
+
+$hostUser = ".\azadmin"
+$hostPass = ConvertTo-SecureString -String "p4ssw0rd*" -AsPlainText -Force
+$hostCredentials = New-Object System.Management.Automation.PSCredential($hostUser,$hostPass)
+
+$safeModeAdministratorPassword = ConvertTo-SecureString -String "p4ssw0rd*" -AsPlainText -Force
+
+###############################################################################
+# Create Hyper-V on Desktop
+###############################################################################
+# Setting shortcut to be on current user's Desktop
+$ShortcutFile = "$home\Desktop\Hyper-V Manager.lnk"
+If ( (test-path -path "$ShortcutFile") -ne $true)
+{
+    $WScriptShell = New-Object -ComObject WScript.Shell
+    $Shortcut = $WScriptShell.CreateShortcut($ShortcutFile)
+    $Shortcut.TargetPath = $root_path
+    $Shortcut.Save()
+}
+
+$wsshell = New-Object -ComObject WScript.Shell
+$lnk = $wsshell.CreateShortcut($ShortcutFile)
+$lnk.WindowStyle = 1
+$lnk.TargetPath = "%windir%\System32\virtmgmt.msc"
+$lnk.Arguments = $TargetPath
+$lnk.IconLocation = "%ProgramFiles%\Hyper-V\SnapInAbout.dll"
+$lnk.save() # This will overwrite the previous link if it existed
+
+###############################################################################
+# Create PowerShell shortcut on Desktop
+###############################################################################
+# Setting shortcut to be on current user's Desktop
+$ShortcutFile = "$home\Desktop\PowerShell.lnk"
+If ( (test-path -path "$ShortcutFile") -ne $true)
+{
+    $WScriptShell = New-Object -ComObject WScript.Shell
+    $Shortcut = $WScriptShell.CreateShortcut($ShortcutFile)
+    $Shortcut.TargetPath = $root_path
+    $Shortcut.Save()
+}
+
+$WshShell = New-Object -comObject WScript.Shell
+$Shortcut = $WshShell.CreateShortcut($ShortcutFile)
+$Shortcut.TargetPath = "C:\Users\azadmin\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Windows PowerShell\Windows PowerShell.lnk"
+$Shortcut.IconLocation = "C:\Windows\System32\windowspowershell\v1.0\powershell.exe,0" # icon index 0
+$Shortcut.Arguments = "-Executionpolicy Unrestricted -NoExit -Command"
+$Shortcut.WorkingDirectory = "C:\Users\azadmin"
+$Shortcut.Save()
+
+###############################################################################
+#Link to Troubleshooting Doc #TODO
+###############################################################################
+
+
+###############################################################################
+# Demo and Activity File Staging
+###############################################################################
+# C:\Logs gets created in 7.2 demo
+Remove-Item -Force -Path "C:\Logs" -ErrorAction:SilentlyContinue
+
+###############################################################################
+# Install Chocolatey
+###############################################################################
+Set-ExecutionPolicy Bypass -Scope Process -Force; `
+[System.Net.ServicePointManager]::SecurityProtocol = `
+[System.Net.ServicePointManager]::SecurityProtocol -bor 3072; `
+Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
+
+###############################################################################
+# Install Choco Packages for Day 2 Removal Demo and Activity
+###############################################################################
+# Packages to actually install
+choco install -y vscode wireshark 7zip
+
+# Stage intentionally outdated package for a potential choco upgrade demo
+choco install -y adobereader --version=2020.009.20074
+
+# Stage intentionally outdaged package for the corresponding activity part
+choco install -y slack --version=4.7.0
+
+###############################################################################
+# Demo
+# Staging for removal demo
+choco install -y itunes vlc
+# Steam was part of this list but it kept needing to update
+
+# Create CSV herestring of choco remove demo
+$chocodemoString = @'
+name,description
+itunes,"Apple's music application"
+vlc,"An application for encoding and playing videos"
+'@
+
+# Stage demo directory for choco sections
+New-Item -Path "C:\Users\azadmin\Documents\Demo\choco\" -ItemType "Directory" -Force
+# Stage demo CSV file
+New-Item -Path "C:\Users\azadmin\Documents\Demo\choco\chocodemo.csv" -ItemType "File" -Value $chocodemoString -Force
+
+###############################################################################
+# Activity
+# Staging for removal activity
+choco install -y mumble skype icloud flashplayeractivex flashplayerppapi uplay telegram
+
+# Ignore checksum staging for Spotify, Teamviewer
+choco install -y spotify teamviewer --ignore-checksums
+
+# Create CSV herestring of choco packages
+$chocoactivityString = @'
+name,description
+mumble,"A voice chat application"
+spotify,"An online music player"
+telegram,"A cloud-based instant messenger"
+skype,"An application for online calling"
+teamviewer,"An application for remotely connecting to another computer"
+icloud,"Apple's cloud-syncing application"
+flashplayeractivex,"An Internet Explorer/Edge add-on that allows one to view Flash animations and videos"
+flashplayerppapi,"Chrome/Chromium's implementation of the Adobe Flash Player Plugin"
+uplay,"The Ubisoft game launcher"
+'@
+
+# Stage activity directory for choco remove activity
+New-Item -Path "C:\Users\azadmin\Documents\Activity\choco\" -ItemType "Directory" -Force
+
+# Stage activity CSV file
+New-Item -Path "C:\Users\azadmin\Documents\Activity\choco\chocoactivity.csv" -ItemType "File"  -Value $chocoactivityString -Force
+
+###############################################################################
+# Stop Choco installed processes
+###############################################################################
+Stop-Process -Name "*Skype*" -Force
+Stop-Process -Name "*TeamViewer*" -Force
+
+###############################################################################
+# Re-stage Local Users <-- to be used in a later script
+###############################################################################
+# $userList = Import-Csv -Path .\host_users.csv
+# # Remove users if they exist
+# Remove-LocalUser $user.username
+# # Loop through CSV user list and create each
+# foreach ($user in $userList) {
+#     $pass = ConvertTo-SecureString $user.password -AsPlainText -Force
+#     New-LocalUser $user.username -Password $pass -FullName $user.fullname -Description $user.description -ErrorAction Continue
+#     Add-LocalGroupMember -Group $user.group -Member $user.username -ErrorAction Continue
+# }
+
+###############################################################################
+# Configure Hyper-V VMs
+###############################################################################
+# Stop VMs before changing Hyper-V configurations
+Stop-VM -Name "Windows 10" -Force
+Stop-VM -Name "Windows Server" -Force
+
+# Configures Hyper-V to shut down VMs instead of saving state when the host is shut down
+Set-VM -Name "Windows 10"  -AutomaticStopAction Shutdown
+Set-VM -Name "Windows Server"  -AutomaticStopAction Shutdown
+
+# Set the VM resource allocations
+Set-VM -Name "Windows 10" -ProcessorCount 2 -StaticMemory -MemoryStartupBytes 8GB
+Set-VM -Name "Windows Server" -ProcessorCount 2 -StaticMemory -MemoryStartupBytes 8GB
+
+###############################################################################
+# Start VMs, wait for hearbeat before running nested script invocations
+###############################################################################
+$virtualMachines = ("Windows 10","Windows Server")
+
+Import-Module Hyper-V
+foreach ($VM in $virtualMachines) {
+    Write-Host "Starting" $VM
+    Start-VM -Name $VM
+    Write-Host "Waiting for VM heartbeat."
+
+    Do {Start-Sleep -Milliseconds 100}`
+    Until ((Get-VMIntegrationService $VM |`
+    ?{$_.name -eq "Heartbeat"}).PrimaryStatusDescription -eq "OK")
+    Start-Sleep -Seconds 15
+}
+
+###############################################################################
+# Networking Setup
+###############################################################################
+# Setup Hyper-V Internal 192.168.0.1/24 NATSwitch
+New-VMSwitch -SwitchName "NATSwitch" -SwitchType Internal
+New-NetIPAddress -IPAddress 192.168.0.1 -PrefixLength 24 -InterfaceAlias "vEthernet (NATSwitch)"
+New-NetNAT -Name "NATNetwork" -InternalIPInterfaceAddressPrefix 192.168.0.0/24
+Get-VM "Windows Server" | Get-VMNetworkAdapter | Connect-VMNetworkAdapter -SwitchName "NATSwitch"
+Get-VM "Windows 10" | Get-VMNetworkAdapter | Connect-VMNetworkAdapter -SwitchName "NATSwitch"
+
+###############################################################################
+# Configure VM IPv4 adapter settings to use new NAT gateway
+###############################################################################
+# Windows Server = 192.168.0.5, DNS to 127.0.0.1 for Active Directory
+Invoke-Command -VMName "Windows Server" -ScriptBlock {
+    # Grabs active interface
+    $if = Get-NetAdapter | Select -ExpandProperty ifIndex
+    # To see configuration of the current interface with var $if set
+    Get-NetIPConfiguration -InterfaceIndex $if
+    # Removes an improperly set IPv4 configuration
+    Remove-NetIPAddress -InterfaceIndex $if -PrefixOrigin Manual `
+    -DefaultGateway 192.168.0.1 -Confirm:$False -ErrorAction SilentlyContinue
+    # Sets persistent address, subnet mask, and default gateway
+    New-NetIPAddress -InterfaceIndex $if -IPAddress 192.168.0.5 `
+    -PrefixLength 24 -DefaultGateway 192.168.0.1
+    # Sets DNS addresses
+    Set-DnsClientServerAddress -InterfaceIndex $if -ServerAddresses `
+    @("127.0.0.1","8.8.8.8")
+    Start-Sleep -Seconds 15 # Need to wait for adapter to setup before next cmd
+    Set-NetConnectionProfile -InterfaceIndex $if -NetworkCategory "Private"
+    winrm quickconfig -quiet
+} -Credential $serverCredentials
+
+# Windows 10 = 192.168.0.10, DNS set to Windows Server machine
+Invoke-Command -VMName "Windows 10" -ScriptBlock {
+    # Grabs active interface
+    $if = Get-NetAdapter | Select -ExpandProperty ifIndex
+    # To see configuration of the current interface with var $if set
+    Get-NetIPConfiguration -InterfaceIndex $if
+    # Removes an improperly set IPv4 configuration
+    Remove-NetIPAddress -InterfaceIndex $if -PrefixOrigin Manual `
+    -DefaultGateway 192.168.0.1 -Confirm:$False -ErrorAction SilentlyContinue
+    # Sets persistent address, subnet mask, and default gateway
+    New-NetIPAddress -InterfaceIndex $if -IPAddress 192.168.0.10 `
+    -PrefixLength 24 -DefaultGateway 192.168.0.1
+    # Sets DNS addresses
+    Set-DnsClientServerAddress -InterfaceIndex $if -ServerAddresses `
+    @("192.168.0.5")
+    Start-Sleep -Seconds 15 # Need to wait for adapter to setup before next cmd
+    Set-NetConnectionProfile -InterfaceIndex $if -NetworkCategory "Private"
+    winrm quickconfig -quiet
+} -Credential $win10Credentials
+
+###############################################################################
+# Set Trusted Hosts for VMs
+###############################################################################
+Invoke-Command -VMName "Windows 10" -Credential $win10Credentials -ScriptBlock {
+    Set-ExecutionPolicy Unrestricted -Force
+    Set-Item WSMan:\localhost\Client\TrustedHosts -Value '192.168.0.10,192.168.0.1' -Force
+}
+
+Invoke-Command -VMName "Windows Server" -Credential $serverCredentials -ScriptBlock {
+    Set-ExecutionPolicy Unrestricted -Force
+    Set-Item WSMan:\localhost\Client\TrustedHosts -Value '192.168.0.5,192.168.0.1' -Force
+}
+
+###############################################################################
+# End Start-up Processes in Windows 10 VM
+###############################################################################
+# RDP into sysadmin on Windows 10 VM (to initialize first-startup processes)
+reg add "HKEY_CURRENT_USER\Software\Microsoft\Terminal Server Client" /v "AuthenticationLevelOverride" /t "REG_DWORD" /d 0 /f
+$vmIP="192.168.0.10"
+$rdpUser="sysadmin"
+$rdpPass="cybersecurity"
+cmdkey /generic:TERMSRV/$vmIP /user:$rdpUser /pass:$rdpPass
+mstsc /v:$vmIP /w:100 /h:100
+Start-Sleep -Seconds 5
+reg delete "HKEY_CURRENT_USER\Software\Microsoft\Terminal Server Client" /v "AuthenticationLevelOverride" /f
+# Wait for startup processes to start
+Start-Sleep -Seconds 120
+
+# Stop processes in Windows 10 VM
+Invoke-Command -VMName "Windows 10" -Credential $win10Credentials -ScriptBlock {
+    Stop-Process -Name "wscript" -Force
+    Stop-Process -Name "*Skype*" -Force
+    Stop-Process -Name "*TeamViewer*" -Force
+    Stop-Process -Name "*Steam*" -Force
+    Stop-Process -Name "*GenericSetup*" -Force
+}
+# End tiny RDP session
+Stop-Process -Name "mstsc" -Force
+
+###############################################################################
+# Setup Active Directory
+###############################################################################
+Invoke-Command -VMName "Windows Server" -ScriptBlock {
+    # Windows PowerShell script for AD DS Deployment
+    Install-WindowsFeature -name AD-Domain-Services -IncludeManagementTools
+    Import-Module ADDSDeployment
+    Install-ADDSForest `
+    -CreateDnsDelegation:$false `
+    -DatabasePath "C:\Windows\NTDS" `
+    -DomainMode "WinThreshold" `
+    -DomainName "GOODCORP.NET" `
+    -DomainNetbiosName "GOODCORP" `
+    -ForestMode "WinThreshold" `
+    -InstallDns:$true `
+    -LogPath "C:\Windows\NTDS" `
+    -NoRebootOnCompletion:$false `
+    -SysvolPath "C:\Windows\SYSVOL" `
+    -SafeModeAdministratorPassword $using:safeModeAdministratorPassword `
+    -Force:$true
+} -Credential $serverCredentials
+
+# Restart both VMs, wait for heartbeat
+Import-Module Hyper-V
+foreach ($VM in $virtualMachines) {
+    Write-Host "Restarting" $VM
+    Restart-VM -Name $VM -Force
+    Write-Host "Waiting for VM heartbeat."
+
+    Do {Start-Sleep -milliseconds 100}`
+    Until ((Get-VMIntegrationService $VM |`
+    ?{$_.name -eq "Heartbeat"}).PrimaryStatusDescription -eq "OK")
+    Start-Sleep -Seconds 15
+}
+
+###############################################################################
+# For when a PoSH Workflow + Domain-join retry is setup
+###############################################################################
+# Retry-Command function
+# function Retry-Command {
+#     [CmdletBinding()]
+#     Param(
+#         [Parameter(Position=0, Mandatory=$true)]
+#         [scriptblock]$ScriptBlock,
+
+#         [Parameter(Position=1, Mandatory=$false)]
+#         [int]$Maximum = 5,
+
+#         [Parameter(Position=2, Mandatory=$false)]
+#         [int]$Delay = 100
+#     )
+
+#     Begin {
+#         $cnt = 0
+#     }
+
+#     Process {
+#         do {
+#             $cnt++
+#             try {
+#                 $ScriptBlock.Invoke()
+#                 return
+#             } catch {
+#                 Write-Error $_.Exception.InnerException.Message -ErrorAction Stop
+#                 Start-Sleep -Milliseconds $Delay
+#             }
+#         } while ($cnt -lt $Maximum)
+
+#         # Throw an error after $Maximum unsuccessful invocations. Doesn't need
+#         # a condition, since the function returns upon successful invocation.
+#         throw 'Execution failed.'
+#     }
+# }
+
+# # Join Windows 10 machine to domain
+
+# Retry-Command -ScriptBlock {
+#     Get-VM -VMName "Windows 10"
+#     Invoke-Command -VMName "Windows 10" -ScriptBlock {
+#         ipconfig /flushdns
+#         Start-Sleep -Seconds 30
+#         Add-Computer -DomainName "GoodCorp.net" -Restart -Verbose -Credential $using:domainCredentials `
+#         -LocalCredential $using:win10Credentials
+#     } -Credential $win10Credentials
+# } -Maximum 10
+
+# Wait 4 minutes for the Windows Server to stop displaying "Applying Computer Settings"
+Write-Host "Waiting 6 minutes before attempting to join domain"
+Start-Sleep -Seconds 360
+
+###############################################################################
+# If having domain-joining issues, run the below as a separate script
+###############################################################################
+# Register to AD DNS and then join domain
+Get-VM -VMName "Windows 10"
+Invoke-Command -VMName "Windows 10" -ScriptBlock {
+    ipconfig /flushdns
+    ipconfig /registerdns
+    ipconfig /displaydns
+    Start-Sleep -Seconds 5
+    Add-Computer -DomainName "GoodCorp.net" -Restart -Verbose `
+    -Credential $using:domainCredentials `
+    -LocalCredential $using:win10Credentials
+} -Credential $win10Credentials
+
+# Add Windows Server sysadmin user to Domain Admins group
+Get-VM -VMName "Windows Server"
+Invoke-Command -VMName "Windows Server" -ScriptBlock {
+    # Ensures PowerShell ActiveDirectory Module is installed
+    Get-WindowsCapability -Online | Where-Object {$_.Name -like "*ActiveDirectory.DS-LDS*"} | Add-WindowsCapability -Online
+    Import-Module -Name ActiveDirectory
+    Add-ADGroupMember -Identity "Domain Admins" -Members "sysadmin" -Verbose -Credential $using:domainCredentials
+} -Credential $domainCredentials
+
+###############################################################################
+# Cybersecurity Bootcamp Desktop Background Setup Script Task Setup
+###############################################################################
+# Herestring that sets up the wallpaper-creating PowerShell script
+$wallpaperString = @'
+###############################################################################
+# Cybersecurity Bootcamp Desktop Background
+###############################################################################
+Function New-BMPfileWithText {
+    [cmdletbinding(PositionalBinding = $false)]
+    PARAM (
+        [Parameter(Mandatory = $true)] 
+            [string]$path = "$home\foo.bmp",
+        
+        [Parameter(Mandatory = $true)] 
+            [string]$text = 'text here',
+        
+        [Parameter(Mandatory = $false)] 
+        [alias('bgColor')] 
+            [system.drawing.color]$bgColour = [system.drawing.color]::Black,
+        
+        [Parameter(Mandatory = $false)] 
+        [alias('fgColor')] 
+            [system.drawing.color]$fgColour = [system.drawing.color]::Gray,
+        
+        [Parameter(Mandatory = $false)] 
+            [System.Drawing.Size]$BMPsize = [System.Drawing.Size]::new(270, 61),
+        [Parameter(Mandatory = $false)] 
+            [int]$fontSize = 9
+    )
+    Begin {
+        Add-Type -AssemblyName System.Drawing
+        
+        $bmp = New-Object -TypeName System.Drawing.Bitmap -Argumentlist ($BMPsize.Width, $BMPsize.Height)
+        $font = New-Object -TypeName System.Drawing.Font -Argumentlist ('Courier New', $fontSize)
+        $bg = New-Object -TypeName Drawing.SolidBrush -ArgumentList ($bgColour)
+        $fg = New-Object -TypeName Drawing.SolidBrush -ArgumentList ($fgColour)
+        $graphics = [System.Drawing.Graphics]::FromImage($bmp)
+        $x,$y = 0,0
+    }
+    Process {
+        $graphics.FillRectangle($bg, $x, $y, $bmp.Width, $bmp.Height)
+        $graphics.DrawString($text, $font, $fg, 590,450)
+        $graphics.Dispose()
+    }
+    End {
+        If (Test-Path -Path $path) {
+            Remove-Item -Path $path 
+        }
+        $bmp.Save($path)
+        
+        Get-Item -Path $path
+    }
+} # Function New-BMPfileWithText
+    
+    
+#region Wallpaper.Setter
+    Add-Type -AssemblyName System.Drawing
+    
+    Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+using Microsoft.Win32;
+namespace Wallpaper
+{
+public enum Style : int
+{
+Tile, Center, Stretch, NoChange
+}
+    
+public class Setter {
+public const int SetDesktopWallpaper = 0x14; // SPI_SETDESKWALLPAPER
+public const int UpdateIniFile = 0x01; // SPIF_UPDATEINIFILE
+public const int SendWinIniChange = 0x02; // SPIF_SENDWININICHANGE
+    
+[DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+private static extern int SystemParametersInfo (int uAction, int uParam, string lpvParam, int fuWinIni);
+    
+public static void SetWallpaper ( string path, Wallpaper.Style style ) {
+SystemParametersInfo( SetDesktopWallpaper, 0, path, UpdateIniFile | SendWinIniChange );
+RegistryKey key = Registry.CurrentUser.OpenSubKey("Control Panel\\Desktop", true);
+switch( style )
+{
+case Style.Stretch :
+key.SetValue(@"WallpaperStyle", "2") ;
+key.SetValue(@"TileWallpaper", "0") ;
+break;
+case Style.Center :
+key.SetValue(@"WallpaperStyle", "1") ;
+key.SetValue(@"TileWallpaper", "0") ;
+break;
+case Style.Tile :
+key.SetValue(@"WallpaperStyle", "1") ;
+key.SetValue(@"TileWallpaper", "1") ;
+break;
+case Style.NoChange :
+break;
+}
+key.Close();
+}
+}
+}
+"@
+#endregion Wallpaper.Setter
+    
+    
+#region New-BMPfileWithText Args
+    $path = "$HOME\Test.bmp"
+    $text = "Cybersecurity Bootcamp`n  Windows Azure Lab"
+    $bgcolor = [drawing.color]::DarkOrange
+    $bgcolor = [drawing.color]::Black
+        
+    $fontsize = 40
+    $bmpsize = New-Object -TypeName System.Drawing.Size -ArgumentList 1920, 1080
+#endregion New-BMPfileWithText Args
+    
+# Generate the BMP file
+$BMPfile = New-BMPfileWithText -path $path -Text $text -bgColour $bgcolor -fontsize $fontsize -BMPsize $bmpsize
+
+### Now pass the generated BMP file and set the wallpaper.
+$Tile = 0
+$Center = 1
+$Stretch = 2
+$NoChange = 3
+    
+[Wallpaper.Setter]::SetWallpaper( $BMPfile.Fullname, $Stretch)
+
+'@
+
+# Stage the Cybersecurity Bootcamp wallpaper PowerShell script
+New-Item -Path "C:\Users\azadmin\set-wallpaper.ps1" -ItemType "File" -Value $wallpaperString -Force
+
+# Create VBScript wrapper for wallpaper-setting PowerShell script.
+# Note that if you schedule a task that runs a PowerShell script, even with the 
+## -WindowStyle Hidden parameters, you'll still see a PowerShell terminal
+## window flash for a split second every time the task executes. 
+## This VBScript wrapper prevents that.
+$vbsString = @'
+Dim objShell,objFSO,objFile
+
+Set objShell=CreateObject("WScript.Shell")
+Set objFSO=CreateObject("Scripting.FileSystemObject")
+
+'enter the path for your PowerShell Script
+ strPath="C:\Users\azadmin\set-wallpaper.ps1"
+
+'verify file exists
+ If objFSO.FileExists(strPath) Then
+   'return short path name
+   set objFile=objFSO.GetFile(strPath)
+   strCMD="powershell -nologo -command " & Chr(34) & "&{" &_
+    objFile.ShortPath & "}" & Chr(34)
+   'Uncomment next line for debugging
+   'WScript.Echo strCMD
+
+  'use 0 to hide window
+   objShell.Run strCMD,0
+
+Else
+
+  'Display error message
+   WScript.Echo "Failed to find " & strPath
+   WScript.Quit
+
+End If
+'@
+
+# Stage the VBScript
+Set-Content "C:\Users\azadmin\set-wallpaper.vbs" -Value $vbsString -Encoding ASCII -Force
+
+# Create Scheduled Task to set up persistent Cybersecurity Bootcamp wallpaper
+$A = New-ScheduledTaskAction -Execute "C:\Users\azadmin\set-wallpaper.vbs" 
+$T = New-ScheduledTaskTrigger `
+    -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5) `
+    -RepetitionDuration (New-TimeSpan -Days (365 * 20))
+$P = New-ScheduledTaskPrincipal -UserID "NT AUTHORITY\SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+$S = New-ScheduledTaskSettingsSet
+$D = New-ScheduledTask -Action $A <#-Principal $P#> -Trigger $T -Settings $S
+Unregister-ScheduledTask "SetWallpaper" -Confirm:$false -ErrorAction:SilentlyContinue
+Register-ScheduledTask "SetWallpaper" -InputObject $D
+
+# Call the VBScript once to set up the Cybersecurity Bootcamp wallpaper
+C:\Users\azadmin\set-wallpaper.vbs
